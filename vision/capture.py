@@ -3,7 +3,7 @@ import time
 import os
 
 # Configuration
-CAMERA_INDEX = 0
+CAMERA_INDEX = 1
 FRAME_WIDTH =1980
 FRAME_HEIGHT = 1080
 TARGET_FPS = 30
