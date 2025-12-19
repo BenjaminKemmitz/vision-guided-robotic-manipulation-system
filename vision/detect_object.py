@@ -13,7 +13,7 @@ while True:
 
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    # Adjust for your object color
+    # Adjust for object color
     lower = (0, 120, 70)
     upper = (10, 255, 255)
     mask = cv2.inRange(hsv, lower, upper)
@@ -50,7 +50,7 @@ while True:
 
     cv2.imshow("Baseline Detection", frame)
     cv2.imshow("Mask", mask)
-
+    
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
