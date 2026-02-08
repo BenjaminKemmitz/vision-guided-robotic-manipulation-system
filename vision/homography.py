@@ -197,10 +197,9 @@ while True:
         masked = mask_aruco(frame, corners)
         objects, _ = detect_objects(masked)
 
-        updated_ids = set()
         claimed_ids = set()
         updated_ids = set()
-
+        
         for cx, cy, cnt in objects:
             wx, wy = pixel_to_world(cx, cy, H)
         
@@ -210,7 +209,6 @@ while True:
             mean_bgr = contour_mean_bgr(frame, cnt)
         
             oid = match_object(wx, wy, tracked_objects, claimed_ids)
-            claimed_ids.add(oid)
         
             if oid is None:
                 oid = next_object_id
@@ -222,14 +220,14 @@ while True:
                 }
             else:
                 prev_obj = tracked_objects[oid]
-                smooth_color = (
+                tracked_objects[oid]["pos"] = (wx, wy)
+                tracked_objects[oid]["color"] = (
                     COLOR_SMOOTHING * prev_obj["color"]
                     + (1 - COLOR_SMOOTHING) * mean_bgr
                 )
-                tracked_objects[oid]["pos"] = (wx, wy)
-                tracked_objects[oid]["color"] = smooth_color
                 tracked_objects[oid]["missed"] = 0
         
+            claimed_ids.add(oid)
             updated_ids.add(oid)
         
             bgr = tracked_objects[oid]["color"]
@@ -249,6 +247,7 @@ while True:
                 (b,g,r),
                 2
             )
+
         
         # Increment missed counters & prune
         for oid in list(tracked_objects.keys()):
