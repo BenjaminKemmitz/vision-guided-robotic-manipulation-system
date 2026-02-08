@@ -15,6 +15,12 @@ YMAX = 316.0  # mm
 
 REQUIRED_IDS = [0, 1, 2, 3]
 
+tracked_objects = {}
+next_object_id = 0
+
+MAX_MATCH_DIST_MM = 30.0
+COLOR_SMOOTHING = 0.8
+
 # =========================
 # CAMERA
 # =========================
@@ -60,6 +66,19 @@ cv2.setMouseCallback("Camera", mouse_cb)
 # =========================
 # HELPERS
 # =========================
+def match_object(wx, wy, tracked):
+    best_id = None
+    best_dist = MAX_MATCH_DIST_MM
+
+    for oid, obj in tracked.items():
+        ox, oy = obj["pos"]
+        d = np.hypot(wx - ox, wy - oy)
+        if d < best_dist:
+            best_dist = d
+            best_id = oid
+
+    return best_id
+
 def pixel_to_world(px, py, H):
     pt = np.array([[[px, py]]], dtype=np.float32)
     world = cv2.perspectiveTransform(pt, H)
@@ -125,11 +144,11 @@ def mask_aruco(frame, corners):
             cv2.fillConvexPoly(masked, c[0].astype(int), (255,255,255))
     return masked
 
-def contour_hex_color(frame, cnt):
+def contour_mean_bgr(frame, cnt):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     cv2.drawContours(mask, [cnt], -1, 255, -1)
-    b,g,r,_ = cv2.mean(frame, mask)
-    return f"#{int(r):02X}{int(g):02X}{int(b):02X}", (int(b),int(g),int(r))
+    b, g, r, _ = cv2.mean(frame, mask)
+    return np.array([b, g, r], dtype=np.float32)
 
 # =========================
 # FPS
