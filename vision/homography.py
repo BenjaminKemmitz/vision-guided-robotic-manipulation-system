@@ -4,7 +4,7 @@ import numpy as np
 import time
 
 # =========================
-# CONFIGURATION
+# CONFIG
 # =========================
 CAMERA_INDEX = 0
 FRAME_WIDTH = 1280
@@ -15,148 +15,118 @@ YMAX = 316.0  # mm
 
 REQUIRED_IDS = [0, 1, 2, 3]
 
-def draw_mm_grid(frame, H, xmax, ymax,
-                 minor=10, major=50):
-    """
-    Draws a metric grid (mm) onto the frame using homography.
-    """
-    Hinv = np.linalg.inv(H)
-    h, w = frame.shape[:2]
-
-    def world_to_pixel(X, Y):
-        p = np.array([X, Y, 1.0])
-        q = Hinv @ p
-        q /= q[2]
-        return int(q[0]), int(q[1])
-
-    # ----- Vertical lines (X constant)
-    for x in range(0, int(xmax) + 1, minor):
-        color = (80, 80, 80) if x % major else (0, 255, 0)
-        thickness = 1 if x % major else 2
-
-        try:
-            p1 = world_to_pixel(x, 0)
-            p2 = world_to_pixel(x, ymax)
-            cv2.line(frame, p1, p2, color, thickness)
-
-            if x % major == 0:
-                cv2.putText(frame, f"{x}",
-                            (p1[0] + 2, p1[1] + 15),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.4, (0, 255, 0), 1)
-        except:
-            pass
-
-    # ----- Horizontal lines (Y constant)
-    for y in range(0, int(ymax) + 1, minor):
-        color = (80, 80, 80) if y % major else (0, 255, 0)
-        thickness = 1 if y % major else 2
-
-        try:
-            p1 = world_to_pixel(0, y)
-            p2 = world_to_pixel(xmax, y)
-            cv2.line(frame, p1, p2, color, thickness)
-
-            if y % major == 0:
-                cv2.putText(frame, f"{y}",
-                            (p1[0] + 2, p1[1] - 2),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.4, (0, 255, 0), 1)
-        except:
-            pass
-
-def detect_objects(frame, min_area=500):
-    """
-    Returns list of (cx, cy, contour)
-    """
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (7, 7), 0)
-
-    _, thresh = cv2.threshold(
-        blur, 0, 255,
-        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-
-    contours, _ = cv2.findContours(
-        thresh,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-    
-    objects = []
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < min_area:
-            continue
-
-        M = cv2.moments(cnt)
-        if M["m00"] == 0:
-            continue
-
-        cx = int(M["m10"] / M["m00"])
-        cy = int(M["m01"] / M["m00"])
-        objects.append((cx, cy, cnt))
-
-    return objects, thresh
-
-def pixel_to_world(px, py, H):
-    pt = np.array([[[px, py]]], dtype=np.float32)
-    world = cv2.perspectiveTransform(pt, H)
-    return world[0][0][0], world[0][0][1]
-
 # =========================
-# CAMERA SETUP
+# CAMERA
 # =========================
 cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
-
 if not cap.isOpened():
-    raise RuntimeError("Could not open camera")
+    raise RuntimeError("Camera failed to open")
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
 cap.set(cv2.CAP_PROP_FPS, 30)
-
 cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 cap.set(cv2.CAP_PROP_FOCUS, 30)
 
 # =========================
-# ARUCO SETUP
+# ARUCO
 # =========================
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
 params = aruco.DetectorParameters()
 detector = aruco.ArucoDetector(aruco_dict, params)
 
-# =========================
-# WORLD POINTS
-# =========================
 WORLD_POINTS = np.array([
-    [0,     0],
-    [XMAX,  0],
-    [XMAX,  YMAX],
-    [0,     YMAX],
+    [0,     0],      # ID 0 bottom-left
+    [XMAX,  0],      # ID 1 bottom-right
+    [XMAX,  YMAX],   # ID 2 top-right
+    [0,     YMAX],   # ID 3 top-left
 ], dtype=np.float32)
 
 H = None
 
 # =========================
-# FPS TRACKING
-# =========================
-prev_time = time.perf_counter()
-frame_count = 0
-fps = 0.0
-
-# =========================
-# MOUSE STATE
+# MOUSE
 # =========================
 mouse_x, mouse_y = None, None
 
-def mouse_callback(event, x, y, flags, param):
+def mouse_cb(event, x, y, flags, param):
     global mouse_x, mouse_y
     if event == cv2.EVENT_MOUSEMOVE:
         mouse_x, mouse_y = x, y
 
-cv2.namedWindow("Camera Feed")
-cv2.setMouseCallback("Camera Feed", mouse_callback)
+cv2.namedWindow("Camera")
+cv2.setMouseCallback("Camera", mouse_cb)
+
+# =========================
+# HELPERS
+# =========================
+def pixel_to_world(px, py, H):
+    pt = np.array([[[px, py]]], dtype=np.float32)
+    world = cv2.perspectiveTransform(pt, H)
+    return world[0][0]
+
+def draw_mm_grid(frame, H, xmax, ymax, minor=10, major=50):
+    Hinv = np.linalg.inv(H)
+
+    def w2p(X, Y):
+        p = np.array([X, Y, 1.0])
+        q = Hinv @ p
+        q /= q[2]
+        return int(q[0]), int(q[1])
+
+    for x in range(0, int(xmax)+1, minor):
+        color = (0,255,0) if x % major == 0 else (80,80,80)
+        thick = 2 if x % major == 0 else 1
+        cv2.line(frame, w2p(x,0), w2p(x,ymax), color, thick)
+
+    for y in range(0, int(ymax)+1, minor):
+        color = (0,255,0) if y % major == 0 else (80,80,80)
+        thick = 2 if y % major == 0 else 1
+        cv2.line(frame, w2p(0,y), w2p(xmax,y), color, thick)
+
+def detect_objects(frame, min_area=1500):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (9,9), 0)
+    _, thresh = cv2.threshold(
+        blur, 0, 255,
+        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+    contours, _ = cv2.findContours(
+        thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    objs = []
+    for c in contours:
+        if cv2.contourArea(c) < min_area:
+            continue
+        M = cv2.moments(c)
+        if M["m00"] == 0:
+            continue
+        cx = int(M["m10"]/M["m00"])
+        cy = int(M["m01"]/M["m00"])
+        objs.append((cx, cy, c))
+
+    return objs, thresh
+
+def mask_aruco(frame, corners):
+    masked = frame.copy()
+    if corners is not None:
+        for c in corners:
+            cv2.fillConvexPoly(masked, c[0].astype(int), (255,255,255))
+    return masked
+
+def contour_hex_color(frame, cnt):
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    cv2.drawContours(mask, [cnt], -1, 255, -1)
+    b,g,r,_ = cv2.mean(frame, mask)
+    return f"#{int(r):02X}{int(g):02X}{int(b):02X}", (int(b),int(g),int(r))
+
+# =========================
+# FPS
+# =========================
+prev = time.perf_counter()
+fc = 0
+fps = 0.0
 
 # =========================
 # MAIN LOOP
@@ -169,89 +139,74 @@ while True:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids, _ = detector.detectMarkers(gray)
 
-    image_points = {}
+    image_pts = {}
 
     if ids is not None:
         ids = ids.flatten()
         aruco.drawDetectedMarkers(frame, corners, ids)
+        for c, mid in zip(corners, ids):
+            image_pts[mid] = c[0].mean(axis=0)
 
-        for corner, marker_id in zip(corners, ids):
-            center = corner[0].mean(axis=0)
-            image_points[marker_id] = center
-
-            cx, cy = int(center[0]), int(center[1])
-            cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
-            cv2.putText(frame, f"ID {marker_id}",
-                        (cx + 5, cy - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (0, 255, 0), 1)
-
-    if H is None and all(i in image_points for i in REQUIRED_IDS):
+    if H is None and all(i in image_pts for i in REQUIRED_IDS):
         IMAGE_POINTS = np.array([
-            image_points[0],
-            image_points[1],
-            image_points[2],
-            image_points[3],
+            image_pts[0],
+            image_pts[1],
+            image_pts[2],
+            image_pts[3],
         ], dtype=np.float32)
-
         H, _ = cv2.findHomography(IMAGE_POINTS, WORLD_POINTS)
-        print("Homography computed!")
+        print("Homography locked")
 
-    # Draw mouse world coordinates
-    if H is not None and mouse_x is not None:
-        pt = np.array([[[mouse_x, mouse_y]]], dtype=np.float32)
-        world = cv2.perspectiveTransform(pt, H)
-        wx, wy = world[0][0]
-
-        cv2.circle(frame, (mouse_x, mouse_y), 5, (0, 0, 255), -1)
-        cv2.putText(
-            frame,
-            f"X={wx:.1f} mm  Y={wy:.1f} mm",
-            (mouse_x + 10, mouse_y - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 255),
-            2
-        )
     if H is not None:
         draw_mm_grid(frame, H, XMAX, YMAX)
-        objects, thresh = detect_objects(frame)
+
+        masked = mask_aruco(frame, corners)
+        objects, _ = detect_objects(masked)
 
         for i, (cx, cy, cnt) in enumerate(objects):
             wx, wy = pixel_to_world(cx, cy, H)
-    
-            # Draw contour
-            cv2.drawContours(frame, [cnt], -1, (255, 0, 0), 2)
-    
-            # Draw centroid
-            cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
-    
-            # Label object
+
+            if not (0 <= wx <= XMAX and 0 <= wy <= YMAX):
+                continue
+
+            hexcol, bgr = contour_hex_color(frame, cnt)
+
+            cv2.drawContours(frame, [cnt], -1, (255,0,0), 2)
+            cv2.circle(frame, (cx,cy), 5, (0,0,255), -1)
             cv2.putText(
                 frame,
-                f"Obj {i}: X={wx:.1f} Y={wy:.1f}",
-                (cx + 10, cy),
+                f"Obj {i} {hexcol}",
+                (cx+8, cy-8),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                (0, 0, 255),
+                bgr,
                 2
             )
 
-    # FPS
-    frame_count += 1
-    now = time.perf_counter()
-    if now - prev_time >= 1.0:
-        fps = frame_count / (now - prev_time)
-        frame_count = 0
-        prev_time = now
-
-    cv2.putText(frame, f"FPS: {fps:.1f}",
-                (10, 30),
+        if mouse_x is not None:
+            wx, wy = pixel_to_world(mouse_x, mouse_y, H)
+            cv2.circle(frame, (mouse_x,mouse_y), 5, (0,0,255), -1)
+            cv2.putText(
+                frame,
+                f"X={wx:.1f} Y={wy:.1f}",
+                (mouse_x+10, mouse_y-10),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.8, (0, 255, 0), 2)
+                0.6,
+                (0,255,255),
+                2
+            )
 
-    cv2.imshow("Camera Feed", frame)
+    fc += 1
+    now = time.perf_counter()
+    if now-prev >= 1.0:
+        fps = fc/(now-prev)
+        fc = 0
+        prev = now
 
+    cv2.putText(frame, f"FPS {fps:.1f}", (10,30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+
+    cv2.imshow("Camera", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
