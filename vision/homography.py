@@ -18,7 +18,7 @@ REQUIRED_IDS = [0, 1, 2, 3]
 tracked_objects = {}
 next_object_id = 0
 
-MAX_MATCH_DIST_MM = 30.0
+MAX_MATCH_DIST_MM = 80.0
 COLOR_SMOOTHING = 0.8
 
 MAX_MISSED_FRAMES = 5
@@ -68,11 +68,14 @@ cv2.setMouseCallback("Camera", mouse_cb)
 # =========================
 # HELPERS
 # =========================
-def match_object(wx, wy, tracked):
+def match_object(wx, wy, tracked, claimed):
     best_id = None
     best_dist = MAX_MATCH_DIST_MM
 
     for oid, obj in tracked.items():
+        if oid in claimed:
+            continue
+
         ox, oy = obj["pos"]
         d = np.hypot(wx - ox, wy - oy)
         if d < best_dist:
@@ -195,6 +198,8 @@ while True:
         objects, _ = detect_objects(masked)
 
         updated_ids = set()
+        claimed_ids = set()
+        updated_ids = set()
 
         for cx, cy, cnt in objects:
             wx, wy = pixel_to_world(cx, cy, H)
@@ -204,7 +209,8 @@ while True:
         
             mean_bgr = contour_mean_bgr(frame, cnt)
         
-            oid = match_object(wx, wy, tracked_objects)
+            oid = match_object(wx, wy, tracked_objects, claimed_ids)
+            claimed_ids.add(oid)
         
             if oid is None:
                 oid = next_object_id
