@@ -215,28 +215,27 @@ while True:
         )
     if H is not None:
         draw_mm_grid(frame, H, XMAX, YMAX)
-    if H is not None:
-    objects, thresh = detect_objects(frame)
+        objects, thresh = detect_objects(frame)
 
-    for i, (cx, cy, cnt) in enumerate(objects):
-        wx, wy = pixel_to_world(cx, cy, H)
-
-        # Draw contour
-        cv2.drawContours(frame, [cnt], -1, (255, 0, 0), 2)
-
-        # Draw centroid
-        cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
-
-        # Label object
-        cv2.putText(
-            frame,
-            f"Obj {i}: X={wx:.1f} Y={wy:.1f}",
-            (cx + 10, cy),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 0, 255),
-            2
-        )
+        for i, (cx, cy, cnt) in enumerate(objects):
+            wx, wy = pixel_to_world(cx, cy, H)
+    
+            # Draw contour
+            cv2.drawContours(frame, [cnt], -1, (255, 0, 0), 2)
+    
+            # Draw centroid
+            cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+    
+            # Label object
+            cv2.putText(
+                frame,
+                f"Obj {i}: X={wx:.1f} Y={wy:.1f}",
+                (cx + 10, cy),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 0, 255),
+                2
+            )
 
     # FPS
     frame_count += 1
