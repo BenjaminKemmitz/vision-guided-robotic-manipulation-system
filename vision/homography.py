@@ -15,6 +15,56 @@ YMAX = 316.0  # mm
 
 REQUIRED_IDS = [0, 1, 2, 3]
 
+def draw_mm_grid(frame, H, xmax, ymax,
+                 minor=10, major=50):
+    """
+    Draws a metric grid (mm) onto the frame using homography.
+    """
+    Hinv = np.linalg.inv(H)
+    h, w = frame.shape[:2]
+
+    def world_to_pixel(X, Y):
+        p = np.array([X, Y, 1.0])
+        q = Hinv @ p
+        q /= q[2]
+        return int(q[0]), int(q[1])
+
+    # ----- Vertical lines (X constant)
+    for x in range(0, int(xmax) + 1, minor):
+        color = (80, 80, 80) if x % major else (0, 255, 0)
+        thickness = 1 if x % major else 2
+
+        try:
+            p1 = world_to_pixel(x, 0)
+            p2 = world_to_pixel(x, ymax)
+            cv2.line(frame, p1, p2, color, thickness)
+
+            if x % major == 0:
+                cv2.putText(frame, f"{x}",
+                            (p1[0] + 2, p1[1] + 15),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4, (0, 255, 0), 1)
+        except:
+            pass
+
+    # ----- Horizontal lines (Y constant)
+    for y in range(0, int(ymax) + 1, minor):
+        color = (80, 80, 80) if y % major else (0, 255, 0)
+        thickness = 1 if y % major else 2
+
+        try:
+            p1 = world_to_pixel(0, y)
+            p2 = world_to_pixel(xmax, y)
+            cv2.line(frame, p1, p2, color, thickness)
+
+            if y % major == 0:
+                cv2.putText(frame, f"{y}",
+                            (p1[0] + 2, p1[1] - 2),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4, (0, 255, 0), 1)
+        except:
+            pass
+
 # =========================
 # CAMERA SETUP
 # =========================
@@ -124,7 +174,8 @@ while True:
             (0, 255, 255),
             2
         )
-
+    if H is not None:
+        draw_mm_grid(frame, H, XMAX, YMAX)
     # FPS
     frame_count += 1
     now = time.perf_counter()
