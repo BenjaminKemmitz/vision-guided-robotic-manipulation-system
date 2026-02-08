@@ -82,7 +82,7 @@ def detect_objects(frame, min_area=500):
         cv2.RETR_EXTERNAL,
         cv2.CHAIN_APPROX_SIMPLE
     )
-
+    
     objects = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -99,6 +99,10 @@ def detect_objects(frame, min_area=500):
 
     return objects, thresh
 
+def pixel_to_world(px, py, H):
+    pt = np.array([[[px, py]]], dtype=np.float32)
+    world = cv2.perspectiveTransform(pt, H)
+    return world[0][0][0], world[0][0][1]
 
 # =========================
 # CAMERA SETUP
@@ -211,6 +215,29 @@ while True:
         )
     if H is not None:
         draw_mm_grid(frame, H, XMAX, YMAX)
+    if H is not None:
+    objects, thresh = detect_objects(frame)
+
+    for i, (cx, cy, cnt) in enumerate(objects):
+        wx, wy = pixel_to_world(cx, cy, H)
+
+        # Draw contour
+        cv2.drawContours(frame, [cnt], -1, (255, 0, 0), 2)
+
+        # Draw centroid
+        cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+
+        # Label object
+        cv2.putText(
+            frame,
+            f"Obj {i}: X={wx:.1f} Y={wy:.1f}",
+            (cx + 10, cy),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 255),
+            2
+        )
+
     # FPS
     frame_count += 1
     now = time.perf_counter()
