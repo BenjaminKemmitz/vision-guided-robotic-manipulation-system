@@ -117,7 +117,7 @@ def detect_objects(frame, min_area=1500):
     sat_mask = s > 25        # lowered for green
     val_mask = v < 245       # reject pure white
 
-    mask = np.logical_or(sat_mask, val_mask).astype(np.uint8) * 255
+    mask = np.logical_and(sat_mask, val_mask).astype(np.uint8) * 255
 
     kernel = np.ones((5,5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
