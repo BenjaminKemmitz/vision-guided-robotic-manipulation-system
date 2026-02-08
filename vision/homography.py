@@ -21,6 +21,8 @@ next_object_id = 0
 MAX_MATCH_DIST_MM = 30.0
 COLOR_SMOOTHING = 0.8
 
+MAX_MISSED_FRAMES = 5
+
 # =========================
 # CAMERA
 # =========================
@@ -192,7 +194,7 @@ while True:
         masked = mask_aruco(frame, corners)
         objects, _ = detect_objects(masked)
 
-        new_tracked = {}
+        updated_ids = set()
 
         for cx, cy, cnt in objects:
             wx, wy = pixel_to_world(cx, cy, H)
@@ -207,9 +209,10 @@ while True:
             if oid is None:
                 oid = next_object_id
                 next_object_id += 1
-                new_tracked[oid] = {
+                tracked_objects[oid] = {
                     "pos": (wx, wy),
-                    "color": mean_bgr
+                    "color": mean_bgr,
+                    "missed": 0
                 }
             else:
                 prev_obj = tracked_objects[oid]
@@ -217,12 +220,13 @@ while True:
                     COLOR_SMOOTHING * prev_obj["color"]
                     + (1 - COLOR_SMOOTHING) * mean_bgr
                 )
-                new_tracked[oid] = {
-                    "pos": (wx, wy),
-                    "color": smooth_color
-                }
+                tracked_objects[oid]["pos"] = (wx, wy)
+                tracked_objects[oid]["color"] = smooth_color
+                tracked_objects[oid]["missed"] = 0
         
-            bgr = new_tracked[oid]["color"]
+            updated_ids.add(oid)
+        
+            bgr = tracked_objects[oid]["color"]
             b = int(bgr[0])
             g = int(bgr[1])
             r = int(bgr[2])
@@ -240,7 +244,13 @@ while True:
                 2
             )
         
-        tracked_objects = new_tracked
+        # Increment missed counters & prune
+        for oid in list(tracked_objects.keys()):
+            if oid not in updated_ids:
+                tracked_objects[oid]["missed"] += 1
+                if tracked_objects[oid]["missed"] > MAX_MISSED_FRAMES:
+                    del tracked_objects[oid]
+
 
         
         if mouse_x is not None:
