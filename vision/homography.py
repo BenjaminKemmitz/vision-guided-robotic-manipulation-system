@@ -87,13 +87,14 @@ def draw_mm_grid(frame, H, xmax, ymax, minor=10, major=50):
 def detect_objects(frame, min_area=1500):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    # Saturation channel
-    sat = hsv[:, :, 1]
+    h, s, v = cv2.split(hsv)
 
-    # Threshold on saturation (objects are colorful, table is not)
-    _, mask = cv2.threshold(sat, 40, 255, cv2.THRESH_BINARY)
+    # Colorful OR darker-than-table objects
+    sat_mask = s > 25        # lowered for green
+    val_mask = v < 245       # reject pure white
 
-    # Clean up
+    mask = np.logical_or(sat_mask, val_mask).astype(np.uint8) * 255
+
     kernel = np.ones((5,5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
