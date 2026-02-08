@@ -14,9 +14,9 @@ FRAME_HEIGHT = 1080
 TARGET_FPS = 30
 SAVE_DIR = "../images/captured"
 
-X_MAX = 66.3   # mm
-Y_MAX = 31.6   # mm
-S = 3.9        # mm (marker size, for reference)
+X_MAX = 663   # mm
+Y_MAX = 316   # mm
+S = 39        # mm (marker size, for reference)
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 
