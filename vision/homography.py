@@ -114,8 +114,8 @@ def detect_objects(frame, min_area=1500):
     h, s, v = cv2.split(hsv)
 
     # Colorful OR darker-than-table objects
-    sat_mask = s > 25        # lowered for green
-    val_mask = v < 245       # reject pure white
+    sat_mask = s > 20        # lowered for green
+    val_mask = v < 250       # reject pure white
 
     mask = np.logical_and(sat_mask, val_mask).astype(np.uint8) * 255
 
