@@ -222,7 +222,10 @@ while True:
                     "color": smooth_color
                 }
         
-            b, g, r = new_tracked[oid]["color"].astype(int)
+            bgr = new_tracked[oid]["color"]
+            b = int(bgr[0])
+            g = int(bgr[1])
+            r = int(bgr[2])
             hexcol = f"#{r:02X}{g:02X}{b:02X}"
         
             cv2.drawContours(frame, [cnt], -1, (255,0,0), 2)
