@@ -83,30 +83,39 @@ def draw_mm_grid(frame, H, xmax, ymax, minor=10, major=50):
         color = (0,255,0) if y % major == 0 else (80,80,80)
         thick = 2 if y % major == 0 else 1
         cv2.line(frame, w2p(0,y), w2p(xmax,y), color, thick)
-
+        
 def detect_objects(frame, min_area=1500):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (9,9), 0)
-    _, thresh = cv2.threshold(
-        blur, 0, 255,
-        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Saturation channel
+    sat = hsv[:, :, 1]
+
+    # Threshold on saturation (objects are colorful, table is not)
+    _, mask = cv2.threshold(sat, 40, 255, cv2.THRESH_BINARY)
+
+    # Clean up
+    kernel = np.ones((5,5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
     contours, _ = cv2.findContours(
-        thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
-    objs = []
+    objects = []
     for c in contours:
         if cv2.contourArea(c) < min_area:
             continue
+
         M = cv2.moments(c)
         if M["m00"] == 0:
             continue
-        cx = int(M["m10"]/M["m00"])
-        cy = int(M["m01"]/M["m00"])
-        objs.append((cx, cy, c))
 
-    return objs, thresh
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        objects.append((cx, cy, c))
+
+    return objects, mask
 
 def mask_aruco(frame, corners):
     masked = frame.copy()
