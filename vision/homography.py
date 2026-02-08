@@ -65,6 +65,41 @@ def draw_mm_grid(frame, H, xmax, ymax,
         except:
             pass
 
+def detect_objects(frame, min_area=500):
+    """
+    Returns list of (cx, cy, contour)
+    """
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+
+    _, thresh = cv2.threshold(
+        blur, 0, 255,
+        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    objects = []
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < min_area:
+            continue
+
+        M = cv2.moments(cnt)
+        if M["m00"] == 0:
+            continue
+
+        cx = int(M["m10"] / M["m00"])
+        cy = int(M["m01"] / M["m00"])
+        objects.append((cx, cy, cnt))
+
+    return objects, thresh
+
+
 # =========================
 # CAMERA SETUP
 # =========================
