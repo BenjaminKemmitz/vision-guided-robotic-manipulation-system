@@ -1,56 +1,79 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
+import time
 
-# =====================
-# CONFIG
-# =====================
-CAMERA_INDEX = 1
-WIDTH = 1280
-HEIGHT = 720
+# =========================
+# CONFIGURATION
+# =========================
+CAMERA_INDEX = 0
+FRAME_WIDTH = 1280
+FRAME_HEIGHT = 720
 
-X_MAX = 663.0   # mm
-Y_MAX = 316.0   # mm
+XMAX = 663.0   # mm
+YMAX = 316.0  # mm
 
-# =====================
-# CAMERA
-# =====================
+REQUIRED_IDS = [0, 1, 2, 3]
+
+# =========================
+# CAMERA SETUP
+# =========================
 cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
 
 if not cap.isOpened():
-    raise RuntimeError("Camera failed to open")
+    raise RuntimeError("Could not open camera")
 
-# =====================
-# ARUCO
-# =====================
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
+cap.set(cv2.CAP_PROP_FPS, 30)
+
+# Disable autofocus (IMPORTANT)
+cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+cap.set(cv2.CAP_PROP_FOCUS, 30)
+
+# =========================
+# ARUCO SETUP
+# =========================
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
-detector = aruco.ArucoDetector(aruco_dict)
+params = aruco.DetectorParameters()
+detector = aruco.ArucoDetector(aruco_dict, params)
 
-WORLD_POINTS = {
-    0: (0, 0),
-    1: (X_MAX, 0),
-    2: (0, Y_MAX),
-    3: (X_MAX, Y_MAX),
-}
+# =========================
+# WORLD POINTS (mm)
+# =========================
+WORLD_POINTS = np.array([
+    [0,     0],      # ID 0
+    [XMAX,  0],      # ID 1
+    [XMAX,  YMAX],   # ID 2
+    [0,     YMAX],   # ID 3
+], dtype=np.float32)
 
-H = None
+H = None  # homography matrix
 
-mouse_x, mouse_y = 0, 0
+# =========================
+# FPS TRACKING
+# =========================
+prev_time = time.perf_counter()
+frame_count = 0
+fps = 0.0
 
-def mouse_cb(event, x, y, flags, param):
-    global mouse_x, mouse_y
-    mouse_x, mouse_y = x, y
+# =========================
+# MOUSE CALLBACK
+# =========================
+def mouse_callback(event, x, y, flags, param):
+    global H
+    if event == cv2.EVENT_MOUSEMOVE and H is not None:
+        pt = np.array([[[x, y]]], dtype=np.float32)
+        world = cv2.perspectiveTransform(pt, H)
+        wx, wy = world[0][0]
+        print(f"X = {wx:.1f} mm, Y = {wy:.1f} mm")
 
-cv2.namedWindow("view")
-cv2.setMouseCallback("view", mouse_cb)
+cv2.namedWindow("Camera Feed")
+cv2.setMouseCallback("Camera Feed", mouse_callback)
 
-print("Move camera until all 4 markers are visible.")
-
-# =====================
-# LOOP
-# =====================
+# =========================
+# MAIN LOOP
+# =========================
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -59,52 +82,68 @@ while True:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids, _ = detector.detectMarkers(gray)
 
-    img_pts = []
-    world_pts = []
+    image_points = {}
 
     if ids is not None:
-        for i, mid in enumerate(ids.flatten()):
-            if mid in WORLD_POINTS:
-                c = corners[i][0]
-                center = c.mean(axis=0)
+        ids = ids.flatten()
+        aruco.drawDetectedMarkers(frame, corners, ids)
 
-                img_pts.append(center)
-                world_pts.append(WORLD_POINTS[mid])
+        for corner, marker_id in zip(corners, ids):
+            center = corner[0].mean(axis=0)
+            image_points[marker_id] = center
 
-                cv2.polylines(frame, [c.astype(int)], True, (0,255,0), 2)
-                cv2.putText(frame, f"ID {mid}",
-                            tuple(center.astype(int)),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6, (0,255,0), 2)
+            cx, cy = int(center[0]), int(center[1])
+            cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+            cv2.putText(frame, f"ID {marker_id}",
+                        (cx + 5, cy - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (0, 255, 0), 1)
 
-        if len(img_pts) == 4 and H is None:
-            H, _ = cv2.findHomography(
-                np.array(img_pts, np.float32),
-                np.array(world_pts, np.float32)
-            )
-            print("Homography computed")
+    # Compute homography ONCE
+    if H is None and all(i in image_points for i in REQUIRED_IDS):
+        IMAGE_POINTS = np.array([
+            image_points[0],
+            image_points[1],
+            image_points[2],
+            image_points[3],
+        ], dtype=np.float32)
 
-    # =====================
-    # COORD DISPLAY
-    # =====================
-    if H is not None:
-        p = np.array([mouse_x, mouse_y, 1.0])
-        P = H @ p
-        P /= P[2]
+        H, _ = cv2.findHomography(IMAGE_POINTS, WORLD_POINTS)
+        print("Homography computed!")
 
-        X, Y = P[0], P[1]
+    # FPS
+    frame_count += 1
+    now = time.perf_counter()
+    if now - prev_time >= 1.0:
+        fps = frame_count / (now - prev_time)
+        frame_count = 0
+        prev_time = now
 
-        cv2.circle(frame, (mouse_x, mouse_y), 4, (0,0,255), -1)
+    cv2.putText(frame, f"FPS: {fps:.1f}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8, (0, 255, 0), 2)
+
+    if H is None:
         cv2.putText(frame,
-                    f"X={X:.1f}mm  Y={Y:.1f}mm",
-                    (mouse_x + 10, mouse_y - 10),
+                    "Move camera until all 4 markers are visible",
+                    (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6, (0,255,255), 2)
+                    0.6, (0, 0, 255), 2)
+    else:
+        cv2.putText(frame,
+                    "Homography LOCKED",
+                    (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6, (0, 255, 0), 2)
 
-    cv2.imshow("view", frame)
+    cv2.imshow("Camera Feed", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+# =========================
+# CLEANUP
+# =========================
 cap.release()
 cv2.destroyAllWindows()
