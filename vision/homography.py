@@ -192,26 +192,54 @@ while True:
         masked = mask_aruco(frame, corners)
         objects, _ = detect_objects(masked)
 
-        for i, (cx, cy, cnt) in enumerate(objects):
-            wx, wy = pixel_to_world(cx, cy, H)
+        new_tracked = {}
 
+        for cx, cy, cnt in objects:
+            wx, wy = pixel_to_world(cx, cy, H)
+        
             if not (0 <= wx <= XMAX and 0 <= wy <= YMAX):
                 continue
-
-            hexcol, bgr = contour_hex_color(frame, cnt)
-
+        
+            mean_bgr = contour_mean_bgr(frame, cnt)
+        
+            oid = match_object(wx, wy, tracked_objects)
+        
+            if oid is None:
+                oid = next_object_id
+                next_object_id += 1
+                new_tracked[oid] = {
+                    "pos": (wx, wy),
+                    "color": mean_bgr
+                }
+            else:
+                prev = tracked_objects[oid]
+                smooth_color = (
+                    COLOR_SMOOTHING * prev["color"]
+                    + (1 - COLOR_SMOOTHING) * mean_bgr
+                )
+                new_tracked[oid] = {
+                    "pos": (wx, wy),
+                    "color": smooth_color
+                }
+        
+            b, g, r = new_tracked[oid]["color"].astype(int)
+            hexcol = f"#{r:02X}{g:02X}{b:02X}"
+        
             cv2.drawContours(frame, [cnt], -1, (255,0,0), 2)
             cv2.circle(frame, (cx,cy), 5, (0,0,255), -1)
             cv2.putText(
                 frame,
-                f"Obj {i} {hexcol}",
+                f"ID {oid} {hexcol}",
                 (cx+8, cy-8),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                bgr,
+                0.6,
+                (b,g,r),
                 2
             )
+        
+        tracked_objects = new_tracked
 
+        
         if mouse_x is not None:
             wx, wy = pixel_to_world(mouse_x, mouse_y, H)
             cv2.circle(frame, (mouse_x,mouse_y), 5, (0,0,255), -1)
