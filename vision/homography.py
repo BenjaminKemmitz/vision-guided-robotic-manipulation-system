@@ -212,9 +212,9 @@ while True:
                     "color": mean_bgr
                 }
             else:
-                prev = tracked_objects[oid]
+                prev_obj = tracked_objects[oid]
                 smooth_color = (
-                    COLOR_SMOOTHING * prev["color"]
+                    COLOR_SMOOTHING * prev_obj["color"]
                     + (1 - COLOR_SMOOTHING) * mean_bgr
                 )
                 new_tracked[oid] = {
