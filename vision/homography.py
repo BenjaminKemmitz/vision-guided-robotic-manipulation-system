@@ -216,16 +216,16 @@ while True:
             oid = match_object(wx, wy, tracked_objects, claimed_ids)
 
             rect = cv2.minAreaRect(cnt)
-                (_, _), (w, h), raw_angle = rect
-                
-                # OpenCV angle correction
-                if w < h:
-                    angle = raw_angle + 90
-                else:
-                    angle = raw_angle
-                
-                # Force angle into [0, 180)
-                angle = angle % 180
+            (_, _), (w, h), raw_angle = rect
+
+            # OpenCV angle correction
+            if w < h:
+                angle = raw_angle + 90
+            else:
+                angle = raw_angle
+            
+            # Force angle into [0, 180)
+            angle = angle % 180       
 
 
             if oid is None:
