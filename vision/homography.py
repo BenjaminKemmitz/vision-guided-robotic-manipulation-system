@@ -171,6 +171,13 @@ def update_color_vote(obj, bgr, min_votes=8):
     if counts[winner] >= int(0.7 * min_votes):
         obj["color_label"] = winner
 
+def circular_mean(angles_deg):
+    angles_rad = np.deg2rad(angles_deg)
+    sin_sum = np.mean(np.sin(angles_rad))
+    cos_sum = np.mean(np.cos(angles_rad))
+    mean = np.arctan2(sin_sum, cos_sum)
+    return np.rad2deg(mean) % 180
+
 # =========================
 # FPS
 # =========================
@@ -240,16 +247,24 @@ while True:
                     "pos_history": [(wx, wy)],
                     "angle": angle,
                     "color_history": [],
-                    "color_label": "UNKNOWN"
+                    "color_label": "UNKNOWN",
+                    "angle_history": [],
+                    "angle_locked": False
                 }
             else:
                 obj = tracked_objects[oid]
                 obj["pos"] = (wx, wy)
                 obj["color"] = COLOR_SMOOTHING * obj["color"] + (1 - COLOR_SMOOTHING) * mean_bgr
-                obj["angle"] = (
-                    ANGLE_SMOOTHING * obj["angle"] +
-                    (1 - ANGLE_SMOOTHING) * angle
-                )
+                obj["angle_history"].append(angle)
+                if len(obj["angle_history"]) > STABLE_FRAMES:
+                    obj["angle_history"].pop(0)
+                
+                # Lock angle once stable
+                if obj["state"] == STATE_STABLE and not obj["angle_locked"]:
+                    if len(obj["angle_history"]) == STABLE_FRAMES:
+                        obj["angle"] = circular_mean(obj["angle_history"])
+                        obj["angle_locked"] = True
+                
                 obj["missed"] = 0
                 obj["age"] += 1
                 obj["pos_history"].append((wx, wy))
@@ -272,9 +287,8 @@ while True:
             y2 = int(cy + length * np.sin(theta))
             cv2.line(frame, (cx, cy), (x2, y2), (255, 255, 255), 2)
             
-            if obj["state"] == STATE_STABLE:
-                angle_deg = int(obj["angle"])
-                angle_text = f"{angle_deg}°"
+            if obj["angle_locked"]:
+                angle_text = f"{int(obj['angle'])}°"
             else:
                 angle_text = "??"
             
