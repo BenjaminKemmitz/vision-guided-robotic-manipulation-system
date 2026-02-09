@@ -33,6 +33,24 @@ STATE_PICKED = 3
 ANGLE_SMOOTHING = 0.7
 
 # =========================
+# FAKE ROBOT CONFIG
+# =========================
+ROBOT_HOME = np.array([XMAX / 2, YMAX + 80])  # off-table "home"
+ROBOT_SPEED = 150.0  # mm per second
+
+DROP_ZONES = {
+    "RED":   np.array([50,  -40]),
+    "GREEN": np.array([330, -40]),
+    "BLUE":  np.array([610, -40]),
+}
+
+robot_pos = ROBOT_HOME.copy()
+robot_target = None
+robot_state = "IDLE"
+robot_object_id = None
+last_robot_time = time.perf_counter()
+
+# =========================
 # CAMERA
 # =========================
 cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
@@ -178,6 +196,25 @@ def circular_mean(angles_deg):
     mean = np.arctan2(sin_sum, cos_sum)
     return np.rad2deg(mean) % 180
 
+def choose_pick_candidate(tracked):
+    for oid, obj in tracked.items():
+        if (
+            obj["state"] == STATE_STABLE and
+            obj["color_label"] != "UNKNOWN" and
+            obj["angle_locked"]
+        ):
+            return oid
+    return None
+
+def move_towards(current, target, speed, dt):
+    direction = target - current
+    dist = np.linalg.norm(direction)
+    if dist < 1e-3:
+        return target.copy(), True
+    step = min(speed * dt, dist)
+    new_pos = current + direction / dist * step
+    return new_pos, step >= dist
+
 # =========================
 # FPS
 # =========================
@@ -286,6 +323,23 @@ while True:
             x2 = int(cx + length * np.cos(theta))
             y2 = int(cy + length * np.sin(theta))
             cv2.line(frame, (cx, cy), (x2, y2), (255, 255, 255), 2)
+
+            # Draw robot
+            rx, ry = robot_pos
+            rx_i, ry_i = int(rx), int(ry)
+            
+            cv2.circle(frame, (rx_i, ry_i), 14, (255, 255, 255), -1)
+            cv2.circle(frame, (rx_i, ry_i), 14, (0, 0, 0), 2)
+            
+            cv2.putText(
+                frame,
+                robot_state,
+                (rx_i - 40, ry_i - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255,255,255),
+                2
+            )
             
             if obj["angle_locked"]:
                 angle_text = f"{int(obj['angle'])}°"
@@ -311,6 +365,52 @@ while True:
                 tracked_objects[oid]["missed"] += 1
                 if tracked_objects[oid]["missed"] > MAX_MISSED_FRAMES:
                     del tracked_objects[oid]
+        for color, pos in DROP_ZONES.items():
+            px, py = int(pos[0]), int(pos[1])
+            if color == "RED":
+                c = (0,0,255)
+            elif color == "GREEN":
+                c = (0,255,0)
+            else:
+                c = (255,0,0)
+            cv2.rectangle(frame, (px-30, py-20), (px+30, py+20), c, 2)
+            cv2.putText(frame, color, (px-28, py-25),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, c, 2)
+
+    now = time.perf_counter()
+    dt = now - last_robot_time
+    last_robot_time = now
+    
+    if robot_state == "IDLE":
+        candidate = choose_pick_candidate(tracked_objects)
+        if candidate is not None:
+            robot_object_id = candidate
+            robot_target = np.array(tracked_objects[candidate]["pos"])
+            tracked_objects[candidate]["state"] = STATE_ASSIGNED
+            robot_state = "MOVE_TO_PICK"
+    
+    elif robot_state == "MOVE_TO_PICK":
+        robot_pos, arrived = move_towards(robot_pos, robot_target, ROBOT_SPEED, dt)
+        if arrived:
+            robot_state = "PICK"
+    
+    elif robot_state == "PICK":
+        if robot_object_id in tracked_objects:
+            tracked_objects[robot_object_id]["state"] = STATE_PICKED
+        robot_state = "MOVE_TO_DROP"
+    
+    elif robot_state == "MOVE_TO_DROP":
+        color = tracked_objects[robot_object_id]["color_label"]
+        robot_target = DROP_ZONES[color]
+        robot_pos, arrived = move_towards(robot_pos, robot_target, ROBOT_SPEED, dt)
+        if arrived:
+            robot_state = "DROP"
+    
+    elif robot_state == "DROP":
+        if robot_object_id in tracked_objects:
+            del tracked_objects[robot_object_id]
+        robot_object_id = None
+        robot_state = "IDLE"
 
     fc += 1
     now = time.perf_counter()
