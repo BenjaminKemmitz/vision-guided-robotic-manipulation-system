@@ -23,6 +23,11 @@ COLOR_SMOOTHING = 0.8
 
 MAX_MISSED_FRAMES = 5
 
+STATE_NEW = 0
+STATE_STABLE = 1
+STATE_ASSIGNED = 2
+STATE_PICKED = 3
+
 # =========================
 # CAMERA
 # =========================
@@ -216,7 +221,10 @@ while True:
                 tracked_objects[oid] = {
                     "pos": (wx, wy),
                     "color": mean_bgr,
-                    "missed": 0
+                    "missed": 0,
+                    "state": STATE_NEW,
+                    "age": 1,
+                    "pos_history": [(wx, wy)]
                 }
             else:
                 prev_obj = tracked_objects[oid]
