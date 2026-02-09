@@ -130,6 +130,45 @@ def contour_mean_bgr(frame, cnt):
     b, g, r, _ = cv2.mean(frame, mask)
     return np.array([b, g, r], dtype=np.float32)
 
+def classify_color_simple(bgr):
+    b, g, r = bgr
+    if r > g and r > b:
+        return "RED"
+    if g > r and g > b:
+        return "GREEN"
+    if b > r and b > g:
+        return "BLUE"
+    return "UNKNOWN"
+
+def update_color_vote(obj, bgr, min_votes=8):
+    label = classify_color_simple(bgr)
+    if label == "UNKNOWN":
+        return
+
+    obj["color_history"].append(label)
+
+    # keep history bounded
+    if len(obj["color_history"]) > min_votes:
+        obj["color_history"].pop(0)
+
+    # only lock color once object is STABLE
+    if obj["state"] != STATE_STABLE:
+        return
+
+    if len(obj["color_history"]) < min_votes:
+        return
+
+    # majority vote
+    counts = {}
+    for c in obj["color_history"]:
+        counts[c] = counts.get(c, 0) + 1
+
+    winner = max(counts, key=counts.get)
+
+    # require strong majority
+    if counts[winner] >= int(0.7 * min_votes):
+        obj["color_label"] = winner
+
 # =========================
 # FPS
 # =========================
@@ -187,7 +226,9 @@ while True:
                     "state": STATE_NEW,
                     "age": 1,
                     "pos_history": [(wx, wy)],
-                    "angle": angle
+                    "angle": angle,
+                    "color_history": [],
+                    "color_label": "UNKNOWN"
                 }
             else:
                 obj = tracked_objects[oid]
@@ -201,6 +242,7 @@ while True:
                     obj["pos_history"].pop(0)
                 if obj["state"] == STATE_NEW and is_position_stable(obj["pos_history"]):
                     obj["state"] = STATE_STABLE
+                update_color_vote(obj, obj["color"])
 
             claimed_ids.add(oid)
             updated_ids.add(oid)
@@ -209,8 +251,16 @@ while True:
             state_color = (0,255,0) if obj["state"] == STATE_STABLE else (0,255,255)
 
             cv2.drawContours(frame, [cnt], -1, state_color, 2)
-            cv2.putText(frame, f"ID {oid} {int(angle)}deg",
-                        (cx+8, cy-8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, state_color, 2)
+            label = f"ID {oid} {obj['color_label']}"
+            cv2.putText(
+                frame,
+                label,
+                (cx+8, cy-8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0,255,0) if obj["color_label"] != "UNKNOWN" else (0,255,255),
+                2
+            )
 
         for oid in list(tracked_objects.keys()):
             if oid not in updated_ids:
