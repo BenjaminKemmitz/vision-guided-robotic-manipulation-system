@@ -30,6 +30,8 @@ STATE_STABLE = 1
 STATE_ASSIGNED = 2
 STATE_PICKED = 3
 
+ANGLE_SMOOTHING = 0.7
+
 # =========================
 # CAMERA
 # =========================
@@ -214,11 +216,17 @@ while True:
             oid = match_object(wx, wy, tracked_objects, claimed_ids)
 
             rect = cv2.minAreaRect(cnt)
-            (cx_r, cy_r), (w, h), angle = rect
-            
-            # Normalize so 0° = long side horizontal
-            if w < h:
-                angle += 90
+                (_, _), (w, h), raw_angle = rect
+                
+                # OpenCV angle correction
+                if w < h:
+                    angle = raw_angle + 90
+                else:
+                    angle = raw_angle
+                
+                # Force angle into [0, 180)
+                angle = angle % 180
+
 
             if oid is None:
                 oid = next_object_id
@@ -238,7 +246,10 @@ while True:
                 obj = tracked_objects[oid]
                 obj["pos"] = (wx, wy)
                 obj["color"] = COLOR_SMOOTHING * obj["color"] + (1 - COLOR_SMOOTHING) * mean_bgr
-                obj["angle"] = angle
+                obj["angle"] = (
+                    ANGLE_SMOOTHING * obj["angle"] +
+                    (1 - ANGLE_SMOOTHING) * angle
+                )
                 obj["missed"] = 0
                 obj["age"] += 1
                 obj["pos_history"].append((wx, wy))
@@ -261,8 +272,14 @@ while True:
             y2 = int(cy + length * np.sin(theta))
             cv2.line(frame, (cx, cy), (x2, y2), (255, 255, 255), 2)
             
-            angle_deg = int(obj["angle"])
-            label = f"ID {oid} {obj['color_label']} {angle_deg}°"
+            if obj["state"] == STATE_STABLE:
+                angle_deg = int(obj["angle"])
+                angle_text = f"{angle_deg}°"
+            else:
+                angle_text = "??"
+            
+            label = f"ID {oid} {obj['color_label']} {angle_text}"
+
             
             cv2.putText(
                 frame,
