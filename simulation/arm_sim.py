@@ -33,11 +33,12 @@ STATE_PICKED = 3
 # =====================================================
 ROBOT_HOME = np.array([XMAX / 2, YMAX + 80])
 ROBOT_SPEED = 150.0
+DROP_MARGIN = 25  # mm from edge
 
 DROP_ZONES = {
-    "RED":   np.array([50,  -40]),
-    "GREEN": np.array([330, -40]),
-    "BLUE":  np.array([610, -40]),
+    "RED":   np.array([XMAX * 0.2, YMAX - DROP_MARGIN]),
+    "GREEN": np.array([XMAX * 0.5, YMAX - DROP_MARGIN]),
+    "BLUE":  np.array([XMAX * 0.8, YMAX - DROP_MARGIN]),
 }
 
 robot_pos = ROBOT_HOME.copy()
@@ -115,6 +116,11 @@ def move_towards(cur, tgt, speed, dt):
     step = min(speed * dt, dist)
     return cur + d / dist * step, step >= dist
 
+def clamp_to_table(pos):
+    x = np.clip(pos[0], 0, XMAX)
+    y = np.clip(pos[1], 0, YMAX)
+    return np.array([x, y])
+    
 # =====================================================
 # MAIN LOOP
 # =====================================================
@@ -255,6 +261,7 @@ while True:
 
     elif robot_state == "MOVE_TO_PICK":
         robot_pos, done = move_towards(robot_pos, robot_target, ROBOT_SPEED, dt)
+        robot_pos = clamp_to_table(robot_pos)
         if done:
             robot_state = "PICK"
 
@@ -265,6 +272,7 @@ while True:
 
     elif robot_state == "MOVE_TO_DROP":
         robot_pos, done = move_towards(robot_pos, robot_target, ROBOT_SPEED, dt)
+        robot_pos = clamp_to_table(robot_pos)
         if done:
             del tracked_objects[robot_object_id]
             robot_object_id = None
