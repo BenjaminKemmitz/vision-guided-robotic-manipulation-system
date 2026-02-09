@@ -214,7 +214,11 @@ while True:
             oid = match_object(wx, wy, tracked_objects, claimed_ids)
 
             rect = cv2.minAreaRect(cnt)
-            angle = rect[2]
+            (cx_r, cy_r), (w, h), angle = rect
+            
+            # Normalize so 0° = long side horizontal
+            if w < h:
+                angle += 90
 
             if oid is None:
                 oid = next_object_id
@@ -251,7 +255,15 @@ while True:
             state_color = (0,255,0) if obj["state"] == STATE_STABLE else (0,255,255)
 
             cv2.drawContours(frame, [cnt], -1, state_color, 2)
-            label = f"ID {oid} {obj['color_label']}"
+            theta = np.deg2rad(obj["angle"])
+            length = 30
+            x2 = int(cx + length * np.cos(theta))
+            y2 = int(cy + length * np.sin(theta))
+            cv2.line(frame, (cx, cy), (x2, y2), (255, 255, 255), 2)
+            
+            angle_deg = int(obj["angle"])
+            label = f"ID {oid} {obj['color_label']} {angle_deg}°"
+            
             cv2.putText(
                 frame,
                 label,
@@ -261,6 +273,7 @@ while True:
                 (0,255,0) if obj["color_label"] != "UNKNOWN" else (0,255,255),
                 2
             )
+
 
         for oid in list(tracked_objects.keys()):
             if oid not in updated_ids:
